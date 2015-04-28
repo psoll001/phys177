@@ -1,0 +1,152 @@
+import numpy as np
+from scipy import integrate
+import sys
+import csv
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+from multiprocessing import Process
+
+
+def cum_trapezoidal_sp(a):
+	#single processor (sp) version without chunking and cluster functionality (c_ver)
+	lena = a.shape
+	atype = a.dtype
+	
+	x1np = np.array([a[0,0:lena[1]-1]], dtype=atype)
+	x2np = np.array([a[0,1:lena[1]]], dtype=atype)
+	y1np = np.array([a[1,0:lena[1]-1]], dtype=atype)
+	y2np = np.array([a[1,1:lena[1]]], dtype=atype)
+	aslices = (x2np - x1np) * (y1np + y2np)
+	return 0.5 * np.cumsum(aslices)
+
+def cum_simpson_sp(a):
+	#only works on even spacing, so it is assumed
+	lena= a.shape
+	atype = a.dtype
+	dx = float(a[0,1] - a[0,0])    #casts dx as a float for cython and to avoid numpy stack thrash
+	dxcheck = float(a[0,2] - a[0,1])
+
+	#if (lena[1] % 2) == 1:            #Escapes with NaN if number of points is ODD
+	#	return np.nan
+	#elif (dx != dxcheck):
+	#	return np.nan          #escapes with NaN if first three points have uneven spacing
+
+	ynpeven = (dx/3.0) * 2.0 * np.array(a[1,1:lena[1]-2:2], dtype=atype)
+	ynpodd = (dx/3.0) * 4.0 * np.array(a[1,2:lena[1]-1:2], dtype=atype)
+	y_combine = np.zeros(lena[1], dtype=float)
+	y_combine[0] = (dx/3.0) * 1.5 * float(a[1,0])
+	y_combine[-1] = (dx/3.0) * 1.5 * float(a[1,-1])
+	increment = 1
+	even_i = 0
+	odd_i = 0
+	
+	while increment < (lena[1] - 2):
+		if (increment % 2) == 1:
+			y_combine[increment] = ynpodd[odd_i]
+			odd_i += 1
+			increment += 1
+		else:
+			y_combine[increment] = ynpeven[even_i]
+			even_i += 1
+			increment += 1
+
+	return np.cumsum(y_combine)
+
+def main(input_file):
+	
+	a_seconds = []
+	a_velocities = []
+	
+	with open(input_file, 'r') as csv_file:
+		file_iter = csv.reader(csv_file, delimiter='\t')
+		for row in file_iter:
+			a_seconds.append(float(row[0]))
+			a_velocities.append(float(row[1]))
+	
+	a_data = np.array([a_seconds,a_velocities], dtype=float)
+	a_absv = np.array([a_seconds,np.absolute(a_velocities)], dtype=float)
+	
+	trapezoidal_sp_plot = np.array(cum_trapezoidal_sp(a_absv), dtype=float)
+	simpson_sp_plot = np.array(cum_simpson_sp(a_absv), dtype=float)
+	cumtrapz_plot = np.array([integrate.cumtrapz(a_absv[1,:], a_absv[0,:], 				initial=0)],dtype=float)
+	trapezoidal_sp_sum = trapezoidal_sp_plot[-1]
+	simpson_sp_sum = simpson_sp_plot[-1]
+	trapz_sum = integrate.trapz(a_absv[1,:], a_absv[0,:])
+	simps_sum = integrate.simps(a_absv[1,:], a_absv[0,:])
+	
+	'''
+	#Printout to confirm code returns proper values against library function
+	print ('Cum_trapezoidal_sp cumulative returns:', trapezoidal_sp_plot)
+	print ('Cum_simpsons_sp cumulative returns   :', simpson_sp_plot[-1])
+	print ('Cumtrapz cumulative returns          :', cumtrapz_plot[-1])
+	print ('Trapezoidal_sp sum returns           :', trapezoidal_sp_sum)
+	print ('Simpsons_sp sum returns              :', simpson_sp_sum)
+	print ('Trapz sum returns                    :', trapz_sum)
+	print ('simps sum returns                    :', simps_sum)
+	'''
+
+	txt_out = open('ex2_trapezoidal_sp.txt','w') 
+	for i in trapezoidal_sp_plot:
+		txt_out.write('%(val)s\n' % {"val": format(i,'0.10f')})
+	txt_out.close()
+	
+	txt_out = open('ex2_simpson_sp.txt','w') 
+	for i in simpson_sp_plot:
+		txt_out.write('%(val)s\n' % {"val": format(i,'0.10f')})
+	txt_out.close()
+	
+	#Begin plotting phase of main()
+	
+	plt.close()                                             #closes hanging plotting data
+	pdf_out = PdfPages('ex2_plots.pdf')                     #opens and initializes a PDF
+
+	# Code for the first page of the PDF file above
+	
+	plt.figure(figsize=(8.27, 11.69), dpi = 200)            #initializes a A4 size page
+	
+	plt.subplot2grid((2,1), (0,0))                          #first of one graphs
+	plt.plot(a_data[0,:], a_data[1,:], c='blue', lw=2)      #plots the first line in blue
+	plt.title('Velocity vs Time Using Trapezoidal Function')
+	plt.xlabel('Time in Seconds')
+	plt.ylabel('Instantaneous Velocity')
+	
+	plt.subplot2grid((2,1), (1,0))                          #first of one graphs
+	plt.plot(a_absv[0,1:], trapezoidal_sp_plot, c='blue', lw=2)#plots the first line in blue
+	plt.title('Distance Traveled vs Time Using Trapezoidal Function')
+	plt.xlabel('Time in Seconds')
+	plt.ylabel('Distance Traveled')
+	
+	
+	plt.tight_layout()                                      #Fixes ovelapping text on page
+	pdf_out.savefig()                                       #Prints to the first page
+	
+	# Code for the seond page of the PDF file above
+	
+	plt.figure(figsize=(8.27, 11.69), dpi = 200)            #initializes a A4 size page
+	
+	plt.subplot2grid((2,1), (0,0))                          #first of one graphs
+	plt.plot(a_data[0,:], a_data[1,:], c='red', lw=2)      #plots the first line in blue
+	plt.title('Velocity vs Time Using Simpson\'s Function')
+	plt.xlabel('Time in Seconds')
+	plt.ylabel('Instantaneous Velocity')
+	
+	plt.subplot2grid((2,1), (1,0))                          #first of one graphs
+	plt.plot(a_absv[0,:], simpson_sp_plot, c='red', lw=2)#plots the first line in blue
+	plt.title('Distance Traveled vs Time Using Simpson\'s Function')
+	plt.xlabel('Time in Seconds')
+	plt.ylabel('Distance Traveled')
+	
+	
+	plt.tight_layout()                                      #Fixes ovelapping text on page
+	pdf_out.savefig()                                       #Prints to the first page
+	
+	pdf_out.close()
+	
+if __name__ == "__main__":
+	#interface with command line
+	if len(sys.argv) == 1:
+		input_file = 'velocities.txt'
+		main(input_file)
+	else:
+		input_file = str(sys.argv[1])
+		main(input_file)

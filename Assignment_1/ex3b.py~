@@ -1,0 +1,83 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+
+def dropped_distance_traveled(v,t):
+	#values must be in meters and seconds respectively
+	return v +(0.5 * 9.81 * t * t)
+
+def time_to_fall(v, x):
+	return (np.sqrt(19.62*x+v*v)-v)/9.81
+
+def dropped_velocity(t):
+	return (9.81 * t)
+
+def main():
+	
+	burj_khalifa_height = 800.0  #height in meters
+	initial_velocity = 0.0
+	final_velocity = 0.0
+	
+	input_check = False
+	while not(input_check):
+		try:
+		  initial_velocity = float(input('Enter lower bound of downward velocities to throw '
+					         'a ball off of a 800m tower: '))
+		  input_check = isinstance(initial_velocity, float)
+		except ValueError as err:
+		  print('Error: %(val)s\n' % {"val": err})
+	
+	input_check = False
+	while not(input_check):
+		try:
+		  final_velocity = float(input('Enter upper bound of downward velocities to throw '
+					       'a ball off of a 800m tower: '))
+		  input_check = isinstance(final_velocity, float)
+		except ValueError as err:
+		  print('Error: %(val)s\n' % {"val": err})
+		if (final_velocity <= initial_velocity):
+		  print('Error: Upper bound must have a value greater than lower bound')
+		  input_check = False
+		
+	n_points = 10
+	bin_spacing = (final_velocity - initial_velocity) / 10
+	print(initial_velocity, final_velocity)
+	velocity_bins = np.arange(initial_velocity, 50.0, 10, dtype=float)
+	print(velocity_bins)
+	fall_times = np.zeros_like(velocity_bins)
+	fall_times = time_to_fall(velocity_bins, burj_khalifa_height)
+	print(fall_times)
+	
+	#begin output to text file
+
+	txt_out = open('ex3b.txt','w')                          #initialize text file for output (w)
+	
+	for i in range(velocity_bins.size):
+		txt_out.write('%(velocity)s, %(fall_time)s\n' %
+		              {"velocity": format(velocity_bins[i], '.010f'),
+		               "fall_time": format(fall_times[i], '.010f')})
+	
+	txt_out.close()
+	
+	#begin generation of graphs and output to pdf
+	
+	plt.close()                                             #closes hanging plotting data
+	pdf_out = PdfPages('ex3b_plots.pdf')                    #opens and initializes a PDF
+
+	# Code for the first page of the PDF file above
+	
+	plt.figure(figsize=(8.27, 11.69), dpi = 200)            #initializes a A4 size page
+	
+	plt.subplot2grid((1,1), (0,0))                          #first of one graphs
+	plt.plot(velocity_bins, fall_times, c='blue', lw=2)#plots the first line in blue
+	plt.title('Time to Fall vs Initial Downward Valocity')
+	plt.xlabel('Initial Downward Velocity')
+	plt.ylabel('Time to Fall')
+	
+	plt.tight_layout()                                      #Fixes ovelapping text on page
+	pdf_out.savefig()                                       #Prints to the first page
+	
+	pdf_out.close()                                         #closes opened pdf file
+	
+	
+main()
